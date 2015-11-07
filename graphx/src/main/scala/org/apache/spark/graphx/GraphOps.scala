@@ -408,6 +408,16 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   }
 
   /**
+   * Run HITS until convergence or a maxium number of interations, returning a pair of graphs
+   * with vertex attributes for authority and hub scores, respectively.
+   *
+   * @see [[org.apache.spark.graphx.lib.HITS$#run]]
+   */
+  def runHITS(tol: Double, maxIter: Int): (VertexRDD[Double], VertexRDD[Double], Int) = {
+    HITS.run(graph, tol, maxIter)
+  }
+
+  /**
    * Compute the connected component membership of each vertex and return a graph with the vertex
    * value containing the lowest vertex id in the connected component containing that vertex.
    *
