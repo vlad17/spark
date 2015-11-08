@@ -20,7 +20,6 @@ package org.apache.spark.graphx.lib
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.GraphGenerators
-import org.apache.spark.rdd.EmptyRDD
 
 class HITSSuite extends SparkFunSuite with LocalSparkContext {
   private val epsilon = 1e-6
@@ -102,7 +101,7 @@ class HITSSuite extends SparkFunSuite with LocalSparkContext {
       // bound.
       val nVertices = 1000
       val tol = 0.001
-      var graph = GraphGenerators.logNormalGraph(sc, nVertices)
+      val graph = GraphGenerators.logNormalGraph(sc, nVertices)
 
       val (auth, hub, n) = graph.runHITS(tol, Int.MaxValue)
       val (expectedAuth, expectedHub, _) = graph.runHITS(0, n)

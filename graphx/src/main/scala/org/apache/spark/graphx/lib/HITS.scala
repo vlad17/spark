@@ -17,8 +17,6 @@
 
 package org.apache.spark.graphx.lib
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.Logging
 import org.apache.spark.graphx._
 import org.apache.spark.rdd.RDD
@@ -71,8 +69,6 @@ object HITS extends Logging {
    * Run HITS until an L2-convergence tolerance is reached or we hit the maximum
    * number of iterations.
    *
-   * @tparam VD the original vertex attribute (not used)
-   * @tparam ED the original edge attribute (not used)
    *
    * @param graph the graph on which to compute HITS
    * @param tol the target squared error between score vectors for both authority and hub
@@ -82,31 +78,42 @@ object HITS extends Logging {
    * @return the Graphs with the vertex authority and hub values as attributes, respectively,
    * followed by the number of iterations it required to reach the target tolerance.
    */
-  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED], tol: Double, maxIter: Int):
+  def run(graph: Graph[_, _], tol: Double, maxIter: Int):
       (VertexRDD[Double], VertexRDD[Double], Int) =
   {
-    var auth: Graph[Double, ED] = Graph(
-      graph.vertices.mapValues(Function.const(1)(_)), graph.edges)
-    var hub: Graph[Double, ED] = auth
+    var auth: Graph[Double, _] = Graph(
+      graph.vertices.mapValues(Function.const(1)(_)),
+      graph.edges.mapValues(Function.const(())(_)))
+    var hub: Graph[Double, _] = auth.cache()
+
+    val edges = auth.edges
 
     var i = 0
     var squareError = tol
     while (i < maxIter && squareError >= tol) {
       val unnormalizedAuth = hub.aggregateMessages[Double](
-        ctx => ctx.sendToDst(ctx.srcAttr), _ + _, TripletFields.Src)
+        ctx => ctx.sendToDst(ctx.srcAttr), _ + _, TripletFields.Src).cache()
       val authNorm = norm(unnormalizedAuth)
-      val authNew = Graph(unnormalizedAuth.mapValues(_ / authNorm), auth.edges)
+      val authNew = Graph(unnormalizedAuth.mapValues(_ / authNorm), edges)
+      unnormalizedAuth.unpersist(false)
 
       val unnormalizedHub = auth.aggregateMessages[Double](
-        ctx => ctx.sendToSrc(ctx.dstAttr), _ + _, TripletFields.Dst)
+        ctx => ctx.sendToSrc(ctx.dstAttr), _ + _, TripletFields.Dst).cache()
       val hubNorm = norm(unnormalizedHub)
-      val hubNew = Graph(unnormalizedHub.mapValues(_ / hubNorm), hub.edges)
+      val hubNew = Graph(unnormalizedHub.mapValues(_ / hubNorm), edges)
+      unnormalizedHub.unpersist(false)
 
+      authNew.cache()
+      val authErr = sqerr(auth, authNew)
+      auth = authNew
+
+      hubNew.cache()
+      val hubErr = sqerr(hub, hubNew)
+      hub = hubNew
+
+      squareError = math.max(authErr, hubErr)
       logInfo(s"HITS finished iteration $i.")
       i += 1
-      squareError = math.max(sqerr(auth, authNew), sqerr(hub, hubNew))
-      auth = authNew
-      hub = hubNew
     }
 
     (auth.vertices, hub.vertices, i)
