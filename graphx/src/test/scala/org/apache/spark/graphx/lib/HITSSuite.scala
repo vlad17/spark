@@ -26,14 +26,14 @@ class HITSSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Test star") {
     withSpark { sc =>
-      val nPeripheralVertices = 1000
+      val nPeripheralVertices = 10
       val starGraph = GraphGenerators.starGraph(sc, nPeripheralVertices + 1).cache()
 
       val (auth, hub, n) = starGraph.runHITS(0, 1)
       val expectedAuth = starGraph.vertices.mapValues(
         (vid, _) => if (vid == 0) 1.0 else 0.0)
       val expectedHub = starGraph.vertices.mapValues(
-        (vid, _) => if (vid == 0) 0.0 else 1.0 / Math.sqrt(nPeripheralVertices))
+        (vid, _) => if (vid == 0) 0.0 else 1.0 / math.sqrt(nPeripheralVertices))
 
       assert(HITS.sqerr(auth, expectedAuth) <= epsilon)
       assert(HITS.sqerr(hub, expectedHub) <= epsilon)
@@ -54,12 +54,12 @@ class HITSSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Test reverse star") {
     withSpark { sc =>
-      val nPeripheralVertices = 1000
+      val nPeripheralVertices = 10
       val starGraph = GraphGenerators.starGraph(sc, nPeripheralVertices + 1).reverse.cache()
 
       val (auth, hub, n) = starGraph.runHITS(epsilon, 3)
       val expectedAuth = starGraph.vertices.mapValues(
-        (vid, _) => if (vid == 0) 0.0 else 1.0 / Math.sqrt(nPeripheralVertices))
+        (vid, _) => if (vid == 0) 0.0 else 1.0 / math.sqrt(nPeripheralVertices))
       val expectedHub = starGraph.vertices.mapValues(
         (vid, _) => if (vid == 0) 1.0 else 0.0)
 
@@ -76,7 +76,7 @@ class HITSSuite extends SparkFunSuite with LocalSparkContext {
       val chainGraph = Graph.fromEdgeTuples(chain, ())
 
       val (auth, hub, n) = chainGraph.runHITS(0, 1)
-      val normedVal = 1.0 / Math.sqrt(nVertices - 1)
+      val normedVal = 1.0 / math.sqrt(nVertices - 1)
       val expectedAuth = chainGraph.vertices.mapValues(
         (vid, _) => if (vid == 0) 0.0 else normedVal)
       val expectedHub = chainGraph.vertices.mapValues(
@@ -95,19 +95,22 @@ class HITSSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Test convergence") {
     withSpark { sc =>
-      // Convergence is feasible, but extremely slow:
-      // Theorem 1 in http://www.dei.unipd.it/~pretto/cocoon/hits_convergence.pdf
-      // This just double checks that the convergence criterion satisfies the tolerance
-      // bound.
-      val nVertices = 1000
+      // With the following parameters, 100 trial runs all
+      // converged within 4 iterations, so setting 20 as the cutoff
+      // should be very safe.
+      val maxIter = 20
+      val nVertices = 50
       val tol = 0.001
       val graph = GraphGenerators.logNormalGraph(sc, nVertices)
 
-      val (auth, hub, n) = graph.runHITS(tol, Int.MaxValue)
-      val (expectedAuth, expectedHub, _) = graph.runHITS(0, n)
-      assert(HITS.sqerr(auth, expectedAuth) == 0)
-      assert(HITS.sqerr(hub, expectedHub) == 0)
+      // Test verifies that convergence actually satisfies the tolerance
+      // criterion (and that convergence is attainable within a reasonable
+      // number of iterations).
+      val (auth, hub, n) = graph.runHITS(tol, maxIter)
 
+      // n < maxIter is very likely to be true. If false, the test may
+      // need to be re-run (since tolerance has likely not been yet satisfied).
+      assert(n < maxIter)
       val (nextAuth, nextHub, _) = graph.runHITS(0, n + 1)
       assert(HITS.sqerr(auth, nextAuth) <= tol)
       assert(HITS.sqerr(hub, nextHub) <= tol)
